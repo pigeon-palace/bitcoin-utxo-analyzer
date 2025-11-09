@@ -13,15 +13,15 @@ class BlockParser:
         for vin in tx['vin']:
             if 'coinbase' in vin:
                 continue
-            delete_hash = vin['txid'] + "_" + str(vin['vout'])
-            self.delete_queue.append((delete_hash,))
+            delete_id = vin['txid'] + "_" + str(vin['vout'])
+            self.delete_queue.append((delete_id,))
         index = 0
         for vout in tx['vout']:
-            insert_hash = tx['txid'] + "_" + str(index)
+            insert_id = tx['txid'] + "_" + str(index)
             address = self.get_address_from_script(vout['scriptPubKey'])
             amount = int(vout['value'] * COIN)
             if amount > 0:
-                self.insert_queue.append((insert_hash, address, amount, timestamp))
+                self.insert_queue.append((insert_id, address, amount, timestamp))
             index += 1
     
     def get_address_from_script(self, script):

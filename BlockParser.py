@@ -2,9 +2,10 @@ import requests
 from env import COIN, REST_URL
 #1410432
 class BlockParser:
-    def __init__(self):
+    def __init__(self, script_handler):
         self.delete_queue = []
         self.insert_queue = []
+        self.script_handler = script_handler
         
     def getblock(self, block_hash):
         return requests.get(REST_URL + '/block/' + block_hash + '.json').json()
@@ -18,26 +19,33 @@ class BlockParser:
         index = 0
         for vout in tx['vout']:
             insert_id = tx['txid'] + "_" + str(index)
-            address = self.get_address_from_script(vout['scriptPubKey'])
+            try:
+                address = self.script_handler.get_address_from_script(vout['scriptPubKey'])
+            except:
+                raise Exception("script['type'] unknown", tx)
             amount = int(vout['value'] * COIN)
             if amount > 0:
                 self.insert_queue.append((insert_id, address, amount, timestamp))
             index += 1
-    
-    def get_address_from_script(self, script):
-        if 'addresses' in script:
-            address = script['addresses'][0]
-        else:
-            if script['type'] != 'pubkey':
-                if script['type'] == 'nonstandard':
-                    return "UNKNOWN"
-                if script['type'] == 'nulldata':
-                    return "UNKNOWN"
-                raise Exception("script['type'] unknown", script['type'])
-            address = script['asm'].split(" ")[0]
-        return address
         
     def clear(self):
         self.insert_queue = []
         self.delete_queue = []
         
+class LitecoinScriptHandler:
+    def get_address_from_script(script):
+        if 'addresses' in script:
+            address = script['addresses'][0]
+        elif script['type'] == 'pubkey':
+            address = script['asm'].split(" ")[0]
+        elif script['type'] == 'nonstandard':
+            address = "UNKNOWN"
+        elif script['type'] == 'nulldata':
+            address = "UNKNOWN"
+        elif script['type'] == 'witness_mweb_hogaddr':
+            address = "hogwarts"
+        elif script['type'] == 'witness_mweb_pegin':
+            address = "hogwarts"
+        else:
+            raise Exception("script['type'] unknown", script['type'])
+        return address

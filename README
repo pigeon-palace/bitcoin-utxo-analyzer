@@ -1,4 +1,5 @@
 Launch node with `-txindex=1 -rest`.
-Configure `env.py` with the appropriate parameters.
-Create virtual environment and install requirements.
-Run `main.py`.
+Configure environment in `UtxoAnalyzer.py` with the appropriate parameters.
+Add appropriate script handler for bitcoin coin.
+Create virtual environment and install `requests`.
+Run `UtxoAnalyzer.py`.

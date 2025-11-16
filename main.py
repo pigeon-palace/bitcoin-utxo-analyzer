@@ -1,9 +1,11 @@
 from datetime import datetime  
-from BlockParser import BlockParser, LitecoinScriptHandler
+from parse.BlockParser import BlockParser
+from parse.LitecoinScriptHandler import LitecoinScriptHandler
+from stat.UtxoAddressDistribution import UtxoAddressDistribution
+from stat.UtxoAgeDistribution import UtxoAgeDistribution
 from UTXODatabase import UTXODatabase
-from StatWriter import StatWriter
 from Timer import Timer
-from env import GENESIS_HASH, init_files
+from env import GENESIS_HASH, init_files, AGE_NAME, ADDRESS_NAME
 
 
 def run_from_block(start_height = 0, start_timestamp = None, start_block_hash = GENESIS_HASH):
@@ -11,7 +13,8 @@ def run_from_block(start_height = 0, start_timestamp = None, start_block_hash = 
         init_files()
     parser = BlockParser(script_handler = LitecoinScriptHandler)
     db = UTXODatabase()
-    writer = StatWriter()
+    utxo_age = UtxoAgeDistribution(AGE_NAME)
+    utxo_address = UtxoAddressDistribution(ADDRESS_NAME)
     timer = Timer()
     block = parser.getblock(start_block_hash)
     block_hash = block['hash']
@@ -27,13 +30,19 @@ def run_from_block(start_height = 0, start_timestamp = None, start_block_hash = 
         block = parser.getblock(block_hash)
         block_day = datetime.utcfromtimestamp(block['time'])
         if block_day.day != day.day:
-            timer.start("compute_" + str(day) + "_" + str(i))
+            timer.start("db_insert" + str(day) + "_" + str(i))
             db.insert(parser.insert_queue)
+            timer.finish("db_insert" + str(day) + "_" + str(i))
+            timer.start("db_delete" + str(day) + "_" + str(i))
             db.delete(parser.delete_queue)
             parser.clear()
-            writer.write_address_distribution(day, db)
-            writer.write_age_distribution(day, db)
-            timer.finish("compute_" + str(day) + "_" + str(i))
+            timer.finish("db_delete" + str(day) + "_" + str(i))
+            timer.start("utxo_age_" + str(day) + "_" + str(i))
+            utxo_age.compute(day, db)
+            timer.finish("utxo_age_" + str(day) + "_" + str(i))
+            timer.start("utxo_address_" + str(day) + "_" + str(i))
+            utxo_address.compute(day, db)
+            timer.finish("utxo_address_" + str(day) + "_" + str(i))
             day = block_day
         print(i)
         for tx in block['tx']:
@@ -41,5 +50,5 @@ def run_from_block(start_height = 0, start_timestamp = None, start_block_hash = 
         block_hash = block['nextblockhash']
         
 if __name__ == "__main__":
-    run_from_block(start_block_hash = "87b8ebea75041a14bbfe870785f9025f788330c50c78b5cacab7685a12b0b355")
+    run_from_block()
         

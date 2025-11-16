@@ -1,0 +1,4 @@
+Launch node with `-txindex=1 -rest`.
+Configure `env.py` with the appropriate parameters.
+Create virtual environment and install requirements.
+Run `main.py`.

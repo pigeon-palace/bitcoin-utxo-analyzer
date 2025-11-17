@@ -3,3 +3,7 @@ Configure environment in `UtxoAnalyzer.py` with the appropriate parameters.
 Add appropriate script handler for bitcoin coin.
 Create virtual environment and install `requests`.
 Run `UtxoAnalyzer.py`.
+
+TODO
+command line args
+save block height to build

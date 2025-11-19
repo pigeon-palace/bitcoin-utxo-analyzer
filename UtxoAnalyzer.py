@@ -9,8 +9,7 @@ from datetime import datetime
 GENESIS_HASH = "80ca095ed10b02e53d769eb6eaf92cd04e9e0759e5be4a8477b42911ba49c78f"
 REST_URL = 'http://127.0.0.1:9332/rest'
 DATABASE_FILENAME = "build/utxo.db"
-ADDRESSES_FILENAME = "build/address_balance_distribution.csv"
-AGE_FILENAME = "build/utxo_age_distribution.csv"
+OUTPUT_FILENAME = "build/output.csv"
 COIN = 10**8
 
 class BlockParser:
@@ -63,28 +62,29 @@ class LitecoinScriptHandler:
         return address
        
 class StatWriter:        
-    def compute_address_sum_by_amount_distribution(self, date, db):
-        results = [0 for i in range(16)]
-        for row in db.cur.execute("""SELECT SUM(amount) FROM utxo GROUP BY address;"""):
-            amount = row[0]
-            if amount:
-                results[int(math.log10(amount))] += amount
-        row = [date.strftime('%Y-%m-%d')] + results
-        self.append(ADDRESSES_FILENAME, row)
-        
-    def compute_utxo_sum_by_age_distribution(self, date, db):
-        results = [0 for i in range(16)]
-        for row in db.cur.execute("""SELECT timestamp, amount FROM utxo;"""):
-            utxo_timestamp = row[0]
-            days_since = max((date.timestamp() - utxo_timestamp)/86400,1)
-            results[int(math.log2(days_since))] += row[1]
-        row = [date.strftime('%Y-%m-%d')] + results
-        self.append(AGE_FILENAME, row)
-        
-    def append(self, filename, results):
-        with open(filename, 'a', newline='') as f:
+    def compute_data(self, date, db, height):
+        address_sum_by_amount = [0 for i in range(16)]
+        utxo_sum_by_age = [0 for i in range(16)]
+        address_count = 0
+        utxo_count = 0
+        address_lookup = {}
+        for row in db.cur.execute("""SELECT timestamp, amount, address FROM utxo;"""):
+            timestamp, amount, address = row
+            utxo_count += 1
+            days_since = max(date.timestamp() - timestamp, 1)/86400
+            utxo_sum_by_age[max(int(math.log2(days_since)),0)] += amount
+            if address not in address_lookup:
+                address_lookup[address] = 0
+                address_count += 1
+            address_data = address_lookup[address]
+            address_lookup[address] = amount + address_data
+        for address in address_lookup:
+            address_data = address_lookup[address]
+            address_sum_by_amount[max(int(math.log10(address_data)), 0)] += address_data
+        row = [date.strftime('%Y-%m-%d')] + [height, address_count, utxo_count] + address_sum_by_amount + utxo_sum_by_age
+        with open(OUTPUT_FILENAME, 'a', newline='') as f:
             writer = csv.writer(f)
-            writer.writerow(results)
+            writer.writerow(row)
         
 class UTXODatabase:
     def __init__(self):
@@ -124,8 +124,7 @@ def confirm(desc):
     
 def init_files():
     confirm("Resetting build directory.")
-    remove_file(ADDRESSES_FILENAME)
-    remove_file(AGE_FILENAME)
+    remove_file(OUTPUT_FILENAME)
     remove_file(DATABASE_FILENAME)
     con = sqlite3.connect(DATABASE_FILENAME)
     cur = con.cursor()
@@ -159,20 +158,18 @@ def run_from_block(start_height = 0, start_timestamp = None, start_block_hash = 
     while 'nextblockhash' in block:
         block = parser.getblock(block_hash)
         block_day = datetime.utcfromtimestamp(block['time'])
+        height = block['height']
         if block_day.day != day.day:
-            timer.start("db_insert_" + str(day) + "_" + str(i))
+            timer.start("db_insert_" + str(day) + "_" + str(height))
             db.insert(parser.insert_queue)
-            timer.end("db_insert_" + str(day) + "_" + str(i))
-            timer.start("db_delete_" + str(day) + "_" + str(i))
+            timer.end("db_insert_" + str(day) + "_" + str(height))
+            timer.start("db_delete_" + str(day) + "_" + str(height))
             db.delete(parser.delete_queue)
             parser.clear()
-            timer.end("db_delete_" + str(day) + "_" + str(i))
-            timer.start("utxo_age_" + str(day) + "_" + str(i))
-            stat.compute_utxo_sum_by_age_distribution(day, db)
-            timer.end("utxo_age_" + str(day) + "_" + str(i))
-            timer.start("utxo_address_" + str(day) + "_" + str(i))
-            stat.compute_address_sum_by_amount_distribution(day, db)
-            timer.end("utxo_address_" + str(day) + "_" + str(i))
+            timer.end("db_delete_" + str(day) + "_" + str(height))
+            timer.start("compute_data" + str(day) + "_" + str(height))
+            stat.compute_data(day, db, height)
+            timer.end("compute_data" + str(day) + "_" + str(height))
             day = block_day
         print(block['height'])
         for tx in block['tx']:
